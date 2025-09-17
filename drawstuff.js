@@ -468,6 +468,9 @@ function rayCastBoxes(context) {
     var windowZ = 0.0;
     var windowSize = 1.0;
 
+    var lightPos = [-0.5, 1.5, -0.5];
+    var lightColor = [1.0, 1.0, 1.0];
+
     for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
             var px = (x + 0.5) / w;
@@ -478,22 +481,69 @@ function rayCastBoxes(context) {
             var wz = windowZ;
 
             var dir = [wx - eye[0], wy - eye[1], wz - eye[2]];
+            dir = normalize(dir);
 
             var minT = Infinity;
             var hitBox = null;
+            var hitNormal = null;
+            var hitT = null;
+
             for (var b = 0; b < inputBoxes.length; b++) {
                 var t = intersectRayBox(eye, dir, inputBoxes[b]);
                 if (t !== null && t < minT && t > 0) {
                     minT = t;
                     hitBox = inputBoxes[b];
+                    hitT = t;
                 }
             }
 
             if (hitBox) {
+                var P = [
+                    eye[0] + hitT * dir[0],
+                    eye[1] + hitT * dir[1],
+                    eye[2] + hitT * dir[2]
+                ];
+
+                hitNormal = getBoxNormal(P, hitBox);
+
+                var N = normalize(hitNormal);
+                var L = normalize([
+                    lightPos[0] - P[0],
+                    lightPos[1] - P[1],
+                    lightPos[2] - P[2]
+                ]);
+                var V = normalize([
+                    eye[0] - P[0],
+                    eye[1] - P[1],
+                    eye[2] - P[2]
+                ]);
+                var H = normalize([
+                    L[0] + V[0],
+                    L[1] + V[1],
+                    L[2] + V[2]
+                ]);
+
+                var ambient = hitBox.ambient;
+                var diffuse = hitBox.diffuse;
+                var specular = hitBox.specular;
+                var n = hitBox.n;
+
+                var NdotL = Math.max(0, dot(N, L));
+                var NdotH = Math.max(0, dot(N, H));
+
+                var color = [0, 0, 0];
+                for (var i = 0; i < 3; i++) {
+                    var ambientTerm = ambient[i] * lightColor[i];
+                    var diffuseTerm = diffuse[i] * lightColor[i] * NdotL;
+                    var specularTerm = specular[i] * lightColor[i] * Math.pow(NdotH, n);
+                    color[i] = ambientTerm + diffuseTerm + specularTerm;
+                    color[i] = Math.min(1.0, Math.max(0.0, color[i]));
+                }
+
                 var c = new Color(
-                    hitBox.diffuse[0] * 255,
-                    hitBox.diffuse[1] * 255,
-                    hitBox.diffuse[2] * 255,
+                    Math.round(color[0] * 255),
+                    Math.round(color[1] * 255),
+                    Math.round(color[2] * 255),
                     255
                 );
                 drawPixel(imagedata, x, y, c);
@@ -501,6 +551,27 @@ function rayCastBoxes(context) {
         }
     }
     context.putImageData(imagedata, 0, 0);
+}
+
+function normalize(v) {
+    var len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    if (len == 0) return [0, 0, 0];
+    return [v[0]/len, v[1]/len, v[2]/len];
+}
+
+function dot(v1, v2) {
+    return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2];
+}
+
+function getBoxNormal(P, box) {
+    var epsilon = 1e-6;
+    if (Math.abs(P[0] - box.lx) < epsilon) return [-1, 0, 0];
+    if (Math.abs(P[0] - box.rx) < epsilon) return [1, 0, 0];
+    if (Math.abs(P[1] - box.by) < epsilon) return [0, -1, 0];
+    if (Math.abs(P[1] - box.ty) < epsilon) return [0, 1, 0];
+    if (Math.abs(P[2] - box.fz) < epsilon) return [0, 0, -1];
+    if (Math.abs(P[2] - box.rz) < epsilon) return [0, 0, 1];
+    return [0, 0, 0];
 }
 
 function intersectRayBox(eye, dir, box) {
