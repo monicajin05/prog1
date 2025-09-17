@@ -458,6 +458,78 @@ function drawInputBoxesUsingPaths(context) {
     } // end if box files found
 } // end draw input boxes
 
+function rayCastBoxes(context) {
+    var inputBoxes = getInputBoxes();
+    var w = context.canvas.width;
+    var h = context.canvas.height;
+    var imagedata = context.createImageData(w,h);
+    
+    var eye = [0.5, 0.5, -0.5];
+    var windowZ = 0.0;
+    var windowSize = 1.0;
+
+    for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+            var px = (x + 0.5) / w;
+            var py = 1.0 - (y + 0.5) / h;
+
+            var wx = px;
+            var wy = py;
+            var wz = windowZ;
+
+            var dir = [wx - eye[0], wy - eye[1], wz - eye[2]];
+
+            var minT = Infinity;
+            var hitBox = null;
+            for (var b = 0; b < inputBoxes.length; b++) {
+                var t = intersectRayBox(eye, dir, inputBoxes[b]);
+                if (t !== null && t < minT && t > 0) {
+                    minT = t;
+                    hitBox = inputBoxes[b];
+                }
+            }
+
+            if (hitBox) {
+                var c = new Color(
+                    hitBox.diffuse[0] * 255,
+                    hitBox.diffuse[1] * 255,
+                    hitBox.diffuse[2] * 255,
+                    255
+                );
+                drawPixel(imagedata, x, y, c);
+            }
+        }
+    }
+    context.putImageData(imagedata, 0, 0);
+}
+
+function intersectRayBox(eye, dir, box) {
+    var tmin = -Infinity, tmax = Infinity;
+    var bounds = [
+        [box.lx, box.rx],
+        [box.by, box.ty],
+        [box.fz, box.rz]
+    ];
+    for (var i = 0; i < 3; i++) {
+        var origin = eye[i];
+        var direction = dir[i];
+        var minB = Math.min(bounds[i][0], bounds[i][1]);
+        var maxB = Math.max(bounds[i][0], bounds[i][1]);
+        if (Math.abs(direction) < 1e-8) {
+            if (origin < minB || origin > maxB) return null;
+        } else {
+            var t1 = (minB - origin) / direction;
+            var t2 = (maxB - origin) / direction;
+            var tNear = Math.min(t1, t2);
+            var tFar = Math.max(t1, t2);
+            tmin = Math.max(tmin, tNear);
+            tmax = Math.min(tmax, tFar);
+            if (tmin > tmax) return null;
+        }
+    }
+    return tmin >= 0 ? tmin : tmax >= 0 ? tmax : null;
+}
+
 /* main -- here is where execution begins after window load */
 
 function main() {
@@ -482,9 +554,11 @@ function main() {
     //drawInputTrainglesUsingPaths(context);
       // shows how to read input file, but not how to draw pixels
     
-    drawRandPixelsInInputBoxes(context);
+    //drawRandPixelsInInputBoxes(context);
       // shows how to draw pixels and read input file
     
     //drawInputBoxesUsingPaths(context);
       // shows how to read input file, but not how to draw pixels
+    
+    rayCastBoxes(context);
 }
