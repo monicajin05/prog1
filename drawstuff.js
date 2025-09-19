@@ -547,6 +547,10 @@ function rayCastBoxes(context) {
                     255
                 );
                 drawPixel(imagedata, x, y, c);
+                
+            }
+            else {
+                drawPixel(imagedata, x, y, new Color(0, 0, 0, 255));
             }
         }
     }
@@ -601,6 +605,16 @@ function intersectRayBox(eye, dir, box) {
     return tmin >= 0 ? tmin : tmax >= 0 ? tmax : null;
 }
 
+let currentView = 0;
+
+function render(context) {
+    if (currentView == 0) {
+        rayCastBoxes(context);
+    } else {
+        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+    }
+}
+
 /* main -- here is where execution begins after window load */
 
 function main() {
@@ -631,5 +645,12 @@ function main() {
     //drawInputBoxesUsingPaths(context);
       // shows how to read input file, but not how to draw pixels
     
-    rayCastBoxes(context);
+    render(context);
+
+    window.addEventListener("keydown", function(event) {
+        if (event.code == "Space" || event.key == " ") {
+            currentView = (currentView + 1) % 2;
+            render(context);
+        }
+    });
 }
