@@ -605,13 +605,137 @@ function intersectRayBox(eye, dir, box) {
     return tmin >= 0 ? tmin : tmax >= 0 ? tmax : null;
 }
 
+function spheres(orig, dir, center, radius) {
+    var oc = [orig[0]-center[0], orig[1]-center[1], orig[2]-center[2]];
+    var a = dot(dir, dir);
+    var b = 2.0 * dot(oc, dir);
+    var c = dot(oc, oc) - radius*radius;
+    var disc = b*b - 4*a*c;
+    if (disc < 0) return null;
+    var sqrtD = Math.sqrt(disc);
+    var t0 = (-b - sqrtD) / (2*a);
+    var t1 = (-b + sqrtD) / (2*a);
+    var t = t0;
+    if (t <= 1e-6) t = t1;
+    if (t <= 1e-6) return null;
+    var P = [orig[0] + t*dir[0], orig[1] + t*dir[1], orig[2] + t*dir[2]];
+    var N = normalize([P[0]-center[0], P[1]-center[1], P[2]-center[2]]);
+    return { t: t, P: P, N: N };
+}
+
+function interestingView(context) {
+    var w = context.canvas.width;
+    var h = context.canvas.height;
+    var imagedata = context.createImageData(w, h);
+
+    var eye = [0.5, 0.5, -0.5];
+    var windowZ = 0.0;
+
+    var lightPos = [-0.5, 1.5, -0.5];
+    var lightColor = [1.0, 1.0, 1.0];
+
+    var stars = [];
+    var randRange = (a,b) => a + Math.random()*(b-a);
+    var STAR_COUNT = 200;
+
+    var margin = 0.0001;
+    var edgeBias = 0.65;
+
+    for (var i=0;i<STAR_COUNT;i++) {
+        var baseR = 0.85 + Math.random()*0.15; 
+        var baseG = 0.55 + Math.random()*0.25; 
+        var baseB = 0.05 + Math.random()*0.10;
+        var cx, cy;
+        if (Math.random() < edgeBias) {
+            // radial sampling
+            var theta = Math.random()*2*Math.PI;
+            var r = 0.35 + Math.pow(Math.random(), 1.2)*0.5;
+            cx = 0.5 + Math.cos(theta)*r;
+            cy = 0.5 + Math.sin(theta)*r;
+        } else {
+            cx = randRange(margin, 1.0 - margin);
+            cy = randRange(margin, 1.0 - margin);
+        }
+        cx = Math.max(margin, Math.min(1.0 - margin, cx));
+        cy = Math.max(margin, Math.min(1.0 - margin, cy));
+
+        stars.push({
+            center: [
+                cx,
+                cy,
+                randRange(0.15, 0.9)
+            ],
+            radius: Math.pow(Math.random(), 2) * 0.02 + 0.002,
+            ambient: [0.05,0.04,0.01],
+            diffuse: [baseR*0.7, baseG*0.7, baseB*0.7],
+            specular: [1.0,1.0,1.0],
+            n: 40,
+            emissive: [baseR, baseG, baseB]
+        });
+    }
+
+    for (var py = 0; py < h; py++) {
+        for (var px = 0; px < w; px++) {
+            var sx = (px + 0.5) / w;
+            var sy = 1.0 - (py + 0.5) / h;
+            var wx = sx, wy = sy, wz = windowZ;
+            var dir = normalize([wx - eye[0], wy - eye[1], wz - eye[2]]);
+
+            var closestT = Infinity;
+            var hit = null;
+
+            for (var s = 0; s < stars.length; s++) {
+                var res = spheres(eye, dir, stars[s].center, stars[s].radius);
+                if (res && res.t < closestT) {
+                    closestT = res.t;
+                    hit = { mat: stars[s], P: res.P, N: res.N };
+                }
+            }
+
+            if (hit) {
+                var M = hit.mat;
+                var P = hit.P;
+                var N = normalize(hit.N);
+                var L = normalize([ lightPos[0]-P[0], lightPos[1]-P[1], lightPos[2]-P[2] ]);
+                var V = normalize([ eye[0]-P[0], eye[1]-P[1], eye[2]-P[2] ]);
+                var H = normalize([ L[0]+V[0], L[1]+V[1], L[2]+V[2] ]);
+
+                var NdotL = Math.max(0, dot(N,L));
+                var NdotH = Math.max(0, dot(N,H));
+
+                var color = [0,0,0];
+                for (var cI=0; cI<3; cI++) {
+                    var amb = M.ambient[cI]*lightColor[cI];
+                    var dif = M.diffuse[cI]*lightColor[cI]*NdotL;
+                    var spec = M.specular[cI]*lightColor[cI]*Math.pow(NdotH, M.n);
+                    // emissive makes stars glow regardless of light
+                    color[cI] = M.emissive[cI] + amb + dif + spec;
+                    color[cI] = Math.min(1.0, Math.max(0.0, color[cI]));
+                }
+
+                var col = new Color(
+                    Math.round(color[0]*255),
+                    Math.round(color[1]*255),
+                    Math.round(color[2]*255),
+                    255
+                );
+                drawPixel(imagedata, px, py, col);
+            } else {
+                drawPixel(imagedata, px, py, new Color(0,0,0,255));
+            }
+        }
+    }
+
+    context.putImageData(imagedata, 0, 0);
+}
+
 let currentView = 0;
 
 function render(context) {
     if (currentView == 0) {
         rayCastBoxes(context);
     } else {
-        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+        interestingView(context);
     }
 }
 
